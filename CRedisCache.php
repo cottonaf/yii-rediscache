@@ -50,9 +50,32 @@ class CRedisCache extends CCache
 		if($this->_cache!==null)
 			return $this->_cache;
 		else{
-            require_once Yii::getPathOfAlias($this->predisPath).".php";
-            Yii::log('Opening Redis connection',CLogger::LEVEL_TRACE);
-			return $this->_cache=new Predis_Client($this->servers);
+			// to use the old single file appreach comment out the next two lines 
+			require_once Yii::getPathOfAlias($this->predisPath).'/Autoloader.php';
+			Predis\Autoloader::register();
+			
+			// uncomment this to use single file approach
+			//require_once Yii::getPathOfAlias($this->predisPath).'.php'; // old single file approach,no autoloading
+
+			Yii::log('Opening Redis connection',CLogger::LEVEL_TRACE);
+			$serverCount = count($this->servers);
+
+			try {
+				$client = new Predis\Client($this->servers);
+				$cluster = $client->getConnection();
+
+				if( $serverCount > 1 )
+					$cluster->executeCommandOnNodes($client->createCommand('PING'));
+			
+			} catch(Predis\Connection\ConnectionException $e) {
+
+				if( $serverCount > 1 )
+				{
+					$badConnection = $e->getConnection();
+					$cluster->remove($badConnection);
+				}
+			}
+			return $this->_cache = $client;
         }
 	}
 
